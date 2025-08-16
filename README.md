@@ -29,8 +29,8 @@ This script integrates MQTT data into Venus OS as a standalone inverter or PV in
 4.  Run: sudo python3 /data/venus-custom/inverter/dbus-mqtt-inverter.py
     For boot startup, add to /data/rc.local or use a service (recommended).
 
-##MQTT Payload Example
-```json
+## MQTT Payload Example
+```ini
 {
   "state": 8,
   "power": 20.0,
@@ -51,11 +51,12 @@ This script integrates MQTT data into Venus OS as a standalone inverter or PV in
   "L3_power": 17.0,       # Optional L3 power
   "L3_frequency": 60.0    # Optional L3 frequency
 }
+````
 
 L1 fields (voltage, load, power, frequency) are required.
 L2/L3 fields are optional and processed if num_phases is 2 or 3.
 
-##Mode Options (/Mode)
+## Mode Options (/Mode)
 
 1 = Charger Only
 2 = Inverter Only
@@ -63,5 +64,5 @@ L2/L3 fields are optional and processed if num_phases is 2 or 3.
 4 = Off (default)
 See CCGX manual for limitations.
 
-##Debug
+## Debug
 Run with --debug or set debug = True in config.ini.
