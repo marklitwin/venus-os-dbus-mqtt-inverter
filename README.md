@@ -1,28 +1,35 @@
-# Venus OS DBus-MQTT Inverter
+[DEFAULT]
+# Device instance for DBus (must be unique, e.g., 111 for inverter, 112 for PV)
+device_instance = 111
 
-This script integrates MQTT data into Venus OS as a standalone inverter or PV inverter via DBus.
+# Device type: "inverter" for standalone inverter or "pvinverter" for PV inverter
+device_type = inverter
 
-## Features
-- Supports "inverter" and "pvinverter" modes via config.
-- Initializes as "off" / zero values.
-- Configurable MQTT settings (host, port, auth, topic).
-- Production-ready with optional debug logging (--debug).
+# Initial mode for inverter (1-4):
+# 1 = Charger Only
+# 2 = Inverter Only
+# 3 = On
+# 4 = Off (default)
+mode = 4
 
-## Requirements
-- Venus OS device (e.g., Cerbo GX).
-- MQTT broker (Venus OS or external).
-- config.ini in the same directory.
+# Number of phases (1, 2, or 3; default: 1)
+num_phases = 1
 
-## Installation
-1. Copy the script to `/data/venus-custom/inverter/dbus-mqtt-inverter.py`.
-2. Create config.ini from config.sample.ini and edit:
-   ```ini
-   [DEFAULT]
-   device_instance = 111
-   device_type = inverter  # or pvinverter
-   mqtt_host = localhost
-   mqtt_port = 1883
-   mqtt_user = 
-   mqtt_password = 
-   mqtt_topic = inverter
-   debug = False
+[MQTT]
+# Broker hostname (default: localhost, use venus.local or IP for external)
+host = localhost
+
+# Broker port (default: 1883)
+port = 1883
+
+# Username (optional, leave blank if not required)
+user =
+
+# Password (optional, leave blank if not required)
+password =
+
+# Topic prefix (default: inverter, e.g., rv/inverter/status)
+topic = inverter
+
+# Enable debug logging (True/False, overridden by --debug flag)
+debug = False
