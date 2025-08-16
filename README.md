@@ -23,17 +23,45 @@ This script integrates MQTT data into Venus OS as a standalone inverter or PV in
 ## Installation
 1. Copy the script to `/data/venus-custom/inverter/dbus-mqtt-inverter.py`.
 2. Create `config.ini` from `config.sample.ini` and edit:
-   ```ini
-   [DEFAULT]
-   device_instance = 111
-   device_type = inverter  # or pvinverter
-   mode = 4              # 1=Charger Only, 2=Inverter Only, 3=On, 4=Off
-   num_phases = 1        # 1, 2, or 3 phases
+3. Install dependencies (if needed):
+        bashopkg update
+        opkg install python3-paho-mqtt python3-gi
+4.  Run: sudo python3 /data/venus-custom/inverter/dbus-mqtt-inverter.py
+    For boot startup, add to /data/rc.local or use a service (recommended).
 
-   [MQTT]
-   host = localhost
-   port = 1883
-   user =
-   password =
-   topic = inverter
-   debug = False
+##MQTT Payload Example
+```json
+{
+  "state": 8,
+  "power": 20.0,
+  "voltage": 120.5,
+  "frequency": 60.0,
+  "load": 37.5,
+  "connected": 1,
+  "error": 0,
+  "dc_voltage": 13.2,
+  "dc_current": 0.0,
+  "temperature": 42.0,
+  "L2_voltage": 120.5,    # Optional L2 output voltage (for 2+ phases)
+  "L2_load": 35.0,        # Optional L2 current
+  "L2_power": 18.0,       # Optional L2 power
+  "L2_frequency": 60.0,   # Optional L2 frequency
+  "L3_voltage": 120.5,    # Optional L3 output voltage (for 3 phases)
+  "L3_load": 34.0,        # Optional L3 current
+  "L3_power": 17.0,       # Optional L3 power
+  "L3_frequency": 60.0    # Optional L3 frequency
+}
+
+L1 fields (voltage, load, power, frequency) are required.
+L2/L3 fields are optional and processed if num_phases is 2 or 3.
+
+##Mode Options (/Mode)
+
+1 = Charger Only
+2 = Inverter Only
+3 = On
+4 = Off (default)
+See CCGX manual for limitations.
+
+##Debug
+Run with --debug or set debug = True in config.ini.
