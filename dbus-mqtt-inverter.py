@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 # dbus-mqtt-inverter.py - Integrates MQTT data into Venus OS as a standalone or PV inverter via DBus.
-# Supports configurable device type (inverter/pvinverter) and initializes as "off"/zero.
+# Supports configurable device type (inverter/pvinverter), number of phases, and initializes as "off"/zero.
 # Based on Victron's VeDbusService and mr-manuel's dbus-mqtt-grid.py.
 # Usage: sudo python3 dbus-mqtt-inverter.py [--debug]
 # Config: /data/venus-custom/inverter/config.ini
@@ -22,13 +22,13 @@ from ve_utils import get_vrm_portal_id
 
 def get_text(value, path):
     """Format Text values with units for GUI display."""
-    if path in ["/Ac/Out/L1/V", "/Ac/L1/Voltage"]:
+    if path in ["/Ac/Out/L1/V", "/Ac/L1/Voltage", "/Ac/Out/L2/V", "/Ac/Out/L3/V"]:
         return f"{value:.1f} V"
-    elif path in ["/Ac/Out/L1/I", "/Ac/L1/Current"]:
+    elif path in ["/Ac/Out/L1/I", "/Ac/L1/Current", "/Ac/Out/L2/I", "/Ac/Out/L3/I"]:
         return f"{value:.2f} A"
-    elif path in ["/Ac/Out/L1/P", "/Ac/L1/Power", "/Ac/Power"]:
+    elif path in ["/Ac/Out/L1/P", "/Ac/L1/Power", "/Ac/Power", "/Ac/Out/L2/P", "/Ac/Out/L3/P"]:
         return f"{value:.1f} W"
-    elif path in ["/Ac/Out/L1/F", "/Ac/L1/Frequency"]:
+    elif path in ["/Ac/Out/L1/F", "/Ac/L1/Frequency", "/Ac/Out/L2/F", "/Ac/Out/L3/F"]:
         return f"{value:.1f} Hz"
     elif path == "/Dc/0/Voltage":
         return f"{value:.1f} V"
@@ -36,7 +36,7 @@ def get_text(value, path):
         return f"{value:.1f} A"
     elif path == "/Dc/0/Temperature":
         return f"{value:.1f} °C"
-    elif path in ["/DeviceInstance", "/Connected", "/State", "/Mode", "/Error", "/Position"]:
+    elif path in ["/DeviceInstance", "/Connected", "/State", "/Mode", "/Error", "/Position", "/Ac/Out/NumberOfPhases"]:
         return str(value)
     elif path in ["/ProductId", "/DeviceType"]:
         return f"0x{value:X}"
@@ -67,6 +67,10 @@ def main():
         logger.error("Invalid device_type. Use 'inverter' or 'pvinverter'.")
         return
     mode = int(config["DEFAULT"].get("mode", "4"))  # 1-4
+    num_phases = int(config["DEFAULT"].get("num_phases", "1"))  # 1, 2, or 3
+    if num_phases not in [1, 2, 3]:
+        logger.error("Invalid num_phases. Use 1, 2, or 3.")
+        num_phases = 1
 
     mqtt = config["MQTT"]
     host = mqtt.get("host", "localhost")
@@ -98,12 +102,22 @@ def main():
     # Add type-specific paths with initial zero/off values
     if device_type == "inverter":
         dbusservice.add_path('/State', 0, gettextcallback=get_text)  # 0 = Off
-        dbusservice.add_path('/Ac/Out/NumberOfPhases', 1, gettextcallback=get_text)
+        dbusservice.add_path('/Ac/Out/NumberOfPhases', num_phases, gettextcallback=get_text)
         dbusservice.add_path('/Ac/ActiveIn/Connected', 0, gettextcallback=get_text)
         dbusservice.add_path('/Ac/Out/L1/V', 0.0, gettextcallback=get_text)
         dbusservice.add_path('/Ac/Out/L1/I', 0.0, gettextcallback=get_text)
         dbusservice.add_path('/Ac/Out/L1/P', 0.0, gettextcallback=get_text)
         dbusservice.add_path('/Ac/Out/L1/F', 0.0, gettextcallback=get_text)
+        if num_phases >= 2:
+            dbusservice.add_path('/Ac/Out/L2/V', 0.0, gettextcallback=get_text)
+            dbusservice.add_path('/Ac/Out/L2/I', 0.0, gettextcallback=get_text)
+            dbusservice.add_path('/Ac/Out/L2/P', 0.0, gettextcallback=get_text)
+            dbusservice.add_path('/Ac/Out/L2/F', 0.0, gettextcallback=get_text)
+        if num_phases == 3:
+            dbusservice.add_path('/Ac/Out/L3/V', 0.0, gettextcallback=get_text)
+            dbusservice.add_path('/Ac/Out/L3/I', 0.0, gettextcallback=get_text)
+            dbusservice.add_path('/Ac/Out/L3/P', 0.0, gettextcallback=get_text)
+            dbusservice.add_path('/Ac/Out/L3/F', 0.0, gettextcallback=get_text)
         dbusservice.add_path('/Dc/0/Voltage', 0.0, gettextcallback=get_text)
         dbusservice.add_path('/Dc/0/Current', 0.0, gettextcallback=get_text)
         dbusservice.add_path('/Dc/0/Temperature', 0.0, gettextcallback=get_text)
@@ -144,21 +158,37 @@ def main():
                     dbusservice['/Ac/Out/L1/V'] = data["voltage"]
                 else:
                     dbusservice['/Ac/L1/Voltage'] = data["voltage"]
+            if "L2_voltage" in data and device_type == "inverter" and num_phases >= 2:
+                dbusservice['/Ac/Out/L2/V'] = data["L2_voltage"]
+            if "L3_voltage" in data and device_type == "inverter" and num_phases == 3:
+                dbusservice['/Ac/Out/L3/V'] = data["L3_voltage"]
             if "load" in data:
                 if device_type == "inverter":
                     dbusservice['/Ac/Out/L1/I'] = data["load"]
                 else:
                     dbusservice['/Ac/L1/Current'] = data["load"]
+            if "L2_load" in data and device_type == "inverter" and num_phases >= 2:
+                dbusservice['/Ac/Out/L2/I'] = data["L2_load"]
+            if "L3_load" in data and device_type == "inverter" and num_phases == 3:
+                dbusservice['/Ac/Out/L3/I'] = data["L3_load"]
             if "power" in data:
                 if device_type == "inverter":
                     dbusservice['/Ac/Out/L1/P'] = data["power"]
                 else:
                     dbusservice['/Ac/Power'] = data["power"]
+            if "L2_power" in data and device_type == "inverter" and num_phases >= 2:
+                dbusservice['/Ac/Out/L2/P'] = data["L2_power"]
+            if "L3_power" in data and device_type == "inverter" and num_phases == 3:
+                dbusservice['/Ac/Out/L3/P'] = data["L3_power"]
             if "frequency" in data:
                 if device_type == "inverter":
                     dbusservice['/Ac/Out/L1/F'] = data["frequency"]
                 else:
                     dbusservice['/Ac/L1/Frequency'] = data["frequency"]
+            if "L2_frequency" in data and device_type == "inverter" and num_phases >= 2:
+                dbusservice['/Ac/Out/L2/F'] = data["L2_frequency"]
+            if "L3_frequency" in data and device_type == "inverter" and num_phases == 3:
+                dbusservice['/Ac/Out/L3/F'] = data["L3_frequency"]
             if "dc_voltage" in data:
                 dbusservice['/Dc/0/Voltage'] = data["dc_voltage"]
             if "dc_current" in data:
