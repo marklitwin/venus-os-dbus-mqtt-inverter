@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
 # dbus-mqtt-inverter.py - Integrates MQTT data into Venus OS as a standalone or PV inverter via DBus.
-# Supports configurable device type (inverter/pvinverter), number of phases, and initializes as "off"/zero.
+# Supports configurable device type (inverter/pvinverter), number of phases, device name, serial number, and initializes as "off"/zero.
 # Based on Victron's VeDbusService and mr-manuel's dbus-mqtt-grid.py.
 # Usage: sudo python3 dbus-mqtt-inverter.py [--debug]
 # Config: /data/venus-custom/inverter/config.ini
 # MQTT Topic: rv/<mqtt_topic>/status
 # GitHub: Publish with this script and config.sample.ini.
+# Last updated: 08:52 AM EDT, Saturday, August 16, 2025.
 
 import dbus
 import dbus.mainloop.glib
@@ -40,6 +41,8 @@ def get_text(value, path):
         return str(value)
     elif path in ["/ProductId", "/DeviceType"]:
         return f"0x{value:X}"
+    elif path in ["/CustomName", "/Serial"]:
+        return str(value)
     elif path == "/Ac/Energy/Forward":
         return f"{value:.1f} kWh"
     return str(value)
@@ -71,6 +74,8 @@ def main():
     if num_phases not in [1, 2, 3]:
         logger.error("Invalid num_phases. Use 1, 2, or 3.")
         num_phases = 1
+    device_name = config["DEFAULT"].get("device_name", "")
+    serial_number = config["DEFAULT"].get("serial_number", "MQTT123456")
 
     mqtt = config["MQTT"]
     host = mqtt.get("host", "localhost")
@@ -92,9 +97,8 @@ def main():
     dbusservice.add_path('/FirmwareVersion', 'v1.0', gettextcallback=get_text)
     dbusservice.add_path('/ProductId', 0xA381, gettextcallback=get_text)
     dbusservice.add_path('/DeviceType', 0x203, gettextcallback=get_text)
-    dbusservice.add_path('/Serial', 'MQTT123456', gettextcallback=get_text)
-    dbusservice.add_path('/HardwareVersion', '1.0', gettextcallback=get_text)
-    dbusservice.add_path('/CustomName', '', gettextcallback=get_text)
+    dbusservice.add_path('/Serial', serial_number, gettextcallback=get_text)
+    dbusservice.add_path('/CustomName', device_name, gettextcallback=get_text)
     dbusservice.add_path('/Mgmt/ProcessName', 'dbus-mqtt-inverter.py', gettextcallback=get_text)
     dbusservice.add_path('/Mgmt/Connection', connection, gettextcallback=get_text)
     dbusservice.add_path('/Error', 0, gettextcallback=get_text)
@@ -201,6 +205,10 @@ def main():
                 dbusservice['/Mode'] = data["mode"]
             if "error" in data:
                 dbusservice['/Error'] = data["error"]
+            if "device_name" in data:
+                dbusservice['/CustomName'] = data["device_name"]
+            if "serial_number" in data:
+                dbusservice['/Serial'] = data["serial_number"]
         except Exception as e:
             logger.error(f"MQTT payload error: {e}")
 
