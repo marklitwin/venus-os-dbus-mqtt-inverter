@@ -5,14 +5,14 @@
 # Based on Victron's VeDbusService and mr-manuel's dbus-mqtt-grid.py.
 # Usage: sudo python3 dbus-mqtt-inverter.py [--debug]
 # Config: /data/venus-custom/inverter/config.ini
-# MQTT Topic: rv/<mqtt_topic>/status
+# MQTT Topic: rv/<mqtt_topic>/status or full topic as configured
 # GitHub: Publish with this script and config.sample.ini.
-# Last updated: 08:52 AM EDT, Saturday, August 16, 2025.
+# Last updated: 09:28 AM EDT, Saturday, August 16, 2025.
 
 import dbus
 import dbus.mainloop.glib
 from gi.repository import GLib
-import paho.mqtt.client as mqtt
+import paho.mqtt.client as mqtt_client
 import json
 import configparser
 import os
@@ -77,12 +77,20 @@ def main():
     device_name = config["DEFAULT"].get("device_name", "")
     serial_number = config["DEFAULT"].get("serial_number", "MQTT123456")
 
-    mqtt = config["MQTT"]
-    host = mqtt.get("host", "localhost")
-    port = int(mqtt.get("port", "1883"))
-    user = mqtt.get("user", "")
-    password = mqtt.get("password", "")
-    topic = mqtt.get("topic", "inverter")
+    mqtt_config = config["MQTT"]  # Configuration section
+    host = mqtt_config.get("host", "localhost")
+    port = int(mqtt_config.get("port", "1883"))
+    user = mqtt_config.get("user", "")
+    password = mqtt_config.get("password", "")
+    topic = mqtt_config.get("topic", "inverter")
+    logger.debug(f"Raw topic from config: {topic}")
+
+    # Construct subscription topic, avoiding extra /status if topic is already complete
+    if topic.endswith("/status"):
+        subscribed_topic = topic
+    else:
+        subscribed_topic = f"rv/{topic}/status" if not topic.startswith("rv/") else f"{topic}/status"
+    logger.debug(f"Final subscribed topic: {subscribed_topic}")
 
     service_name = f"com.victronenergy.{device_type}.mqtt_{device_instance}"
     connection = "BLE → MQTT → dbus"
@@ -146,80 +154,107 @@ def main():
 
     def on_connect(client, userdata, flags, rc, properties=None):
         logger.info(f"MQTT connected with result code {rc}")
-        client.subscribe(f"rv/{topic}/status")
+        logger.info(f"Subscribing to topic: {subscribed_topic}")
+        client.subscribe(subscribed_topic)
 
     def on_disconnect(client, userdata, rc):
         logger.info(f"MQTT disconnected with result code {rc}")
 
     def on_message(client, userdata, msg):
-        logger.debug(f"MQTT message received: {msg.topic} {msg.payload}")
+        logger.debug(f"MQTT message received on topic: {msg.topic} with payload: {msg.payload}")
         try:
             data = json.loads(msg.payload)
             if "state" in data:
                 dbusservice['/State'] = data["state"]
+                logger.debug(f"Pushing to DBus: /State = {data['state']}")
             if "voltage" in data:
                 if device_type == "inverter":
                     dbusservice['/Ac/Out/L1/V'] = data["voltage"]
+                    logger.debug(f"Pushing to DBus: /Ac/Out/L1/V = {data['voltage']}")
                 else:
                     dbusservice['/Ac/L1/Voltage'] = data["voltage"]
+                    logger.debug(f"Pushing to DBus: /Ac/L1/Voltage = {data['voltage']}")
             if "L2_voltage" in data and device_type == "inverter" and num_phases >= 2:
                 dbusservice['/Ac/Out/L2/V'] = data["L2_voltage"]
+                logger.debug(f"Pushing to DBus: /Ac/Out/L2/V = {data['L2_voltage']}")
             if "L3_voltage" in data and device_type == "inverter" and num_phases == 3:
                 dbusservice['/Ac/Out/L3/V'] = data["L3_voltage"]
+                logger.debug(f"Pushing to DBus: /Ac/Out/L3/V = {data['L3_voltage']}")
             if "load" in data:
                 if device_type == "inverter":
                     dbusservice['/Ac/Out/L1/I'] = data["load"]
+                    logger.debug(f"Pushing to DBus: /Ac/Out/L1/I = {data['load']}")
                 else:
                     dbusservice['/Ac/L1/Current'] = data["load"]
+                    logger.debug(f"Pushing to DBus: /Ac/L1/Current = {data['load']}")
             if "L2_load" in data and device_type == "inverter" and num_phases >= 2:
                 dbusservice['/Ac/Out/L2/I'] = data["L2_load"]
+                logger.debug(f"Pushing to DBus: /Ac/Out/L2/I = {data['L2_load']}")
             if "L3_load" in data and device_type == "inverter" and num_phases == 3:
                 dbusservice['/Ac/Out/L3/I'] = data["L3_load"]
+                logger.debug(f"Pushing to DBus: /Ac/Out/L3/I = {data['L3_load']}")
             if "power" in data:
                 if device_type == "inverter":
                     dbusservice['/Ac/Out/L1/P'] = data["power"]
+                    logger.debug(f"Pushing to DBus: /Ac/Out/L1/P = {data['power']}")
                 else:
                     dbusservice['/Ac/Power'] = data["power"]
+                    logger.debug(f"Pushing to DBus: /Ac/Power = {data['power']}")
             if "L2_power" in data and device_type == "inverter" and num_phases >= 2:
                 dbusservice['/Ac/Out/L2/P'] = data["L2_power"]
+                logger.debug(f"Pushing to DBus: /Ac/Out/L2/P = {data['L2_power']}")
             if "L3_power" in data and device_type == "inverter" and num_phases == 3:
                 dbusservice['/Ac/Out/L3/P'] = data["L3_power"]
+                logger.debug(f"Pushing to DBus: /Ac/Out/L3/P = {data['L3_power']}")
             if "frequency" in data:
                 if device_type == "inverter":
                     dbusservice['/Ac/Out/L1/F'] = data["frequency"]
+                    logger.debug(f"Pushing to DBus: /Ac/Out/L1/F = {data['frequency']}")
                 else:
                     dbusservice['/Ac/L1/Frequency'] = data["frequency"]
+                    logger.debug(f"Pushing to DBus: /Ac/L1/Frequency = {data['frequency']}")
             if "L2_frequency" in data and device_type == "inverter" and num_phases >= 2:
                 dbusservice['/Ac/Out/L2/F'] = data["L2_frequency"]
+                logger.debug(f"Pushing to DBus: /Ac/Out/L2/F = {data['L2_frequency']}")
             if "L3_frequency" in data and device_type == "inverter" and num_phases == 3:
                 dbusservice['/Ac/Out/L3/F'] = data["L3_frequency"]
+                logger.debug(f"Pushing to DBus: /Ac/Out/L3/F = {data['L3_frequency']}")
             if "dc_voltage" in data:
                 dbusservice['/Dc/0/Voltage'] = data["dc_voltage"]
+                logger.debug(f"Pushing to DBus: /Dc/0/Voltage = {data['dc_voltage']}")
             if "dc_current" in data:
                 dbusservice['/Dc/0/Current'] = data["dc_current"]
+                logger.debug(f"Pushing to DBus: /Dc/0/Current = {data['dc_current']}")
             if "temperature" in data:
                 dbusservice['/Dc/0/Temperature'] = data["temperature"]
+                logger.debug(f"Pushing to DBus: /Dc/0/Temperature = {data['temperature']}")
             if "connected" in data:
                 dbusservice['/Connected'] = data["connected"]
+                logger.debug(f"Pushing to DBus: /Connected = {data['connected']}")
             if "mode" in data:
                 dbusservice['/Mode'] = data["mode"]
+                logger.debug(f"Pushing to DBus: /Mode = {data['mode']}")
             if "error" in data:
                 dbusservice['/Error'] = data["error"]
+                logger.debug(f"Pushing to DBus: /Error = {data['error']}")
             if "device_name" in data:
                 dbusservice['/CustomName'] = data["device_name"]
+                logger.debug(f"Pushing to DBus: /CustomName = {data['device_name']}")
             if "serial_number" in data:
                 dbusservice['/Serial'] = data["serial_number"]
+                logger.debug(f"Pushing to DBus: /Serial = {data['serial_number']}")
         except Exception as e:
             logger.error(f"MQTT payload error: {e}")
 
-    client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
-                         client_id="MqttInverter_" + get_vrm_portal_id() + "_" + str(device_instance))
+    client = mqtt_client.Client(callback_api_version=mqtt_client.CallbackAPIVersion.VERSION2,
+                               client_id="MqttInverter_" + get_vrm_portal_id() + "_" + str(device_instance))
     if user and password:
         client.username_pw_set(user, password)
     client.on_disconnect = on_disconnect
     client.on_connect = on_connect
     client.on_message = on_message
 
+    logger.info(f"Attempting to connect to MQTT broker at {host}:{port}")
     client.connect(host, port, 60)
     client.loop_start()
 
